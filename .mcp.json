@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "amt-asset-mcp": {
+      "command": "node",
+      "args": ["dist/index.js"],
+      "env": {
+        "DATABASE_URL": "postgresql://placeholder-until-module-02/amt_saas_dev",
+        "TENANT_ID": "dev-tenant-placeholder"
+      }
+    }
+  }
+}
