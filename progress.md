@@ -16,5 +16,19 @@
   tools; Claude Code handshake confirmed (`"status": "connected"` in the headless init
   event); typecheck passes. One-time `.mcp.json` approval pending next `claude` session
   in this repo.
+- Repo pushed PUBLIC to GitHub (`itsAnkitpy/amt_saas_mcp`) with `PRD/` tracked;
+  `posts/` + `HANDOFF.md` untracked. Secret sweep of tracked files: placeholders only.
 - Next: module 02 (db layer) — FRESH search for a community read-only Postgres MCP
   server first (official one archived, unpatched SQL-injection hole — do not use).
+
+## 2026-07-23
+- Module 02 (db layer) DONE, done-when met + one better: read-only role
+  `amt_mcp_ro` proven at the grant layer (INSERT denied even with the read-only
+  transaction belt bypassed); `src/db.ts` — 3 tenant-pinned helpers, 14-check
+  verification ALL PASS (wrong-tenant empty, injection-shaped input literal).
+- Inspector wired: Postgres MCP Pro (restricted) in `.mcp.json` via `${VAR:-default}`,
+  connecting AS the read-only role; exercised in a real headless session ($0.17/34s).
+- security-review (cold) finding fixed: `users` grant column-scoped — email
+  unreadable by construction. Deviation recorded in PRD module 02.
+- Post 2 drafted (`posts/02-database-login-that-cant-write.md`) — Ankit to edit+post.
+- Next: module 03 (tools) — re-verify `registerTool` against SDK 1.29.0 docs first.

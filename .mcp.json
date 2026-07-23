@@ -4,8 +4,15 @@
       "command": "node",
       "args": ["dist/index.js"],
       "env": {
-        "DATABASE_URL": "postgresql://placeholder-until-module-02/amt_saas_dev",
+        "DATABASE_URL": "postgresql://placeholder-until-module-05/amt_saas",
         "TENANT_ID": "dev-tenant-placeholder"
+      }
+    },
+    "postgres-inspect": {
+      "command": "uvx",
+      "args": ["postgres-mcp", "--access-mode=restricted"],
+      "env": {
+        "DATABASE_URI": "${AMT_MCP_DB_URL:-postgresql://amt_mcp_ro@localhost:5432/amt_saas}"
       }
     }
   }

@@ -47,4 +47,10 @@ dev-DB tenant and empty for a wrong tenant.
 
 ## Deviation (if any)
 
-None.
+- **2026-07-23 — `users` grant column-scoped, not table-level** (security-review
+  finding during build, approved): table-level `SELECT ON users` let the raw-SQL
+  inspection server read every tenant's `email`/`role`/`isSuperAdmin`, bypassing the
+  PII rule the helpers enforce by column-list discipline. Fixed with a column-level
+  grant — `SELECT (id, "firstName", "lastName", "tenantId")` — so email is unreadable
+  for this role by construction, same mechanism-over-discipline move as the missing
+  write grants. `tenants` stays table-level: module 04's boot check reads it.
