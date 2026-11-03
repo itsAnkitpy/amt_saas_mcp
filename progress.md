@@ -53,4 +53,12 @@
 - Cold review found two bugs, both fixed (module 03 deviation): dates came back 5h30 early
   on a non-UTC machine, and a dropped idle database connection crashed the server. Checks
   and cold sessions rerun after the fixes.
-- Next: module 04 (guardrails).
+- Module 04 (guardrails) built: boot check for the tenant, input checks, one output function
+  with the tenant re-check and a list of allowed fields, notes-are-data wording.
+  `check:tools`: 89 of 89. Forced-bug test: old code leaked, new code blocked all three tools.
+- Injection test: three cold sessions showed the poisoned note as text and did not obey it.
+  Note restored, row fingerprint matches. Security review: nothing at the reporting bar.
+  Module 04 done-when met, with the email limit in the module 04 deviation section.
+- Cold code review: holder re-check tightened and unused fields removed (module 04 deviation).
+  Security review rerun on the fixes: nothing at the reporting bar.
+- Next: module 05 when Ankit says go.

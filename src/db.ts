@@ -7,6 +7,8 @@
 //      clause itself — scoping is inside the query, not remembered at call sites.
 // PII rule (PRD overview): user emails are never SELECTed. Assignment history
 // returns first/last name only.
+// tenantId and holderTenantId are selected only for the output re-check in tools.ts,
+// which also keeps them from leaving the server.
 
 import pg from "pg";
 
@@ -18,8 +20,9 @@ pg.types.setTypeParser(
 );
 
 // Row shapes are typed by hand — the no-ORM decision from PRD module 02.
-// customFields is the category-defined JSON blob; passed through as-is.
 export interface AssetDetailRow {
+  tenantId: string;
+  holderTenantId: string | null;
   id: string;
   name: string;
   serialNumber: string | null;
@@ -28,10 +31,8 @@ export interface AssetDetailRow {
   condition: string;
   location: string | null;
   notes: string | null;
-  customFields: unknown;
   purchaseDate: Date | null;
   warrantyEnd: Date | null;
-  createdAt: Date;
   archivedAt: Date | null;
   categoryName: string;
   assignedToFirstName: string | null;
@@ -39,6 +40,7 @@ export interface AssetDetailRow {
 }
 
 export interface AssetSummaryRow {
+  tenantId: string;
   id: string;
   name: string;
   serialNumber: string | null;
@@ -50,7 +52,8 @@ export interface AssetSummaryRow {
 }
 
 export interface AssignmentHistoryRow {
-  id: string;
+  tenantId: string;
+  holderTenantId: string | null;
   assignedAt: Date;
   returnedAt: Date | null;
   notes: string | null;
@@ -90,15 +93,21 @@ export function createDb(databaseUrl: string) {
     console.error("amt-asset-mcp: idle database connection lost:", error.message);
   });
 
+  async function tenantExists(tenantId: string): Promise<boolean> {
+    const result = await pool.query(`SELECT 1 FROM tenants WHERE id = $1`, [tenantId]);
+    return result.rows.length > 0;
+  }
+
   async function getAssetById(
     tenantId: string,
     assetId: string
   ): Promise<AssetDetailRow | null> {
     const result = await pool.query<AssetDetailRow>(
-      `SELECT a.id, a.name, a."serialNumber", a."assetTag",
+      `SELECT a."tenantId", u."tenantId" AS "holderTenantId",
+              a.id, a.name, a."serialNumber", a."assetTag",
               a.status::text AS status, a.condition::text AS condition,
-              a.location, a.notes, a."customFields",
-              a."purchaseDate", a."warrantyEnd", a."createdAt", a."archivedAt",
+              a.location, a.notes,
+              a."purchaseDate", a."warrantyEnd", a."archivedAt",
               c.name AS "categoryName",
               u."firstName" AS "assignedToFirstName",
               u."lastName"  AS "assignedToLastName"
@@ -159,7 +168,7 @@ export function createDb(databaseUrl: string) {
 
     params.push(cappedLimit);
     const rowsResult = await pool.query<AssetSummaryRow>(
-      `SELECT a.id, a.name, a."serialNumber", a."assetTag",
+      `SELECT a."tenantId", a.id, a.name, a."serialNumber", a."assetTag",
               a.status::text AS status, a.condition::text AS condition,
               a.location, c.name AS "categoryName"
        FROM assets a
@@ -183,7 +192,8 @@ export function createDb(databaseUrl: string) {
     // asset_assignments has NO tenantId column — the tenant scope rides the
     // JOIN to assets, which is pinned to $1. Email deliberately not selected.
     const result = await pool.query<AssignmentHistoryRow>(
-      `SELECT aa.id, aa."assignedAt", aa."returnedAt", aa.notes,
+      `SELECT a."tenantId", u."tenantId" AS "holderTenantId",
+              aa."assignedAt", aa."returnedAt", aa.notes,
               u."firstName" AS "userFirstName",
               u."lastName"  AS "userLastName"
        FROM asset_assignments aa
@@ -200,7 +210,7 @@ export function createDb(databaseUrl: string) {
     await pool.end();
   }
 
-  return { getAssetById, listAssets, getAssignmentHistory, close };
+  return { tenantExists, getAssetById, listAssets, getAssignmentHistory, close };
 }
 
 export type Db = ReturnType<typeof createDb>;

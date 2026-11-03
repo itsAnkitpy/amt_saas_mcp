@@ -55,4 +55,47 @@ transcript shows the note quoted, not obeyed; emails absent from every output.
 
 ## Deviation (if any)
 
-None.
+All 2026-11-03, found during build:
+
+- **Boot when the database can't answer:** the plan only covered a missing tenant. The
+  server exits only when the database answers and the tenant row is absent. If the database
+  can't answer, it logs to stderr and keeps running, so tools return the plain error. Cost:
+  the tenant goes unverified at boot in that case. The output re-check still stops another
+  tenant's rows from leaving, but it can't catch a mistyped `TENANT_ID`, because no rows come
+  back. Once the database is up, that session reports an empty tenant, and the next launch
+  refuses to start. Nothing leaks, so the code stays as it is. Database calls still have no
+  time limit, so a database that hangs rather than refuses would also hold up startup.
+- **Free text limits added:** `search` and `category` refuse more than 200 characters and
+  NUL characters. The plan named ids and enums only, but a NUL reached Postgres and failed
+  there. `qr_value` needs no limit, because the id check runs before any query.
+- **Unknown arguments refused:** all three tools use `z.strictObject`. Before, a `tenant_id`
+  argument was silently dropped, so an AI could read its own tenant's rows and believe they
+  belonged to another tenant.
+- **Re-check also covers the holder:** `users."tenantId"` is compared too, because a holder's
+  name is the only personal data that leaves. A row that names a person must carry that
+  person's tenant, and it must match. Only a row with no holder may leave it empty. Cold
+  review tightened this: the first version also passed a missing or empty holder tenant, on
+  the belief that a superadmin could hold an asset. amt-saas only assigns users of the same
+  tenant, and the dev data has no such holder. Production was not checked. A row like that
+  now refuses with a loud error. Category names are not re-checked: a category name is only
+  a label, and amt-saas scopes the category on write.
+- **One list of allowed fields for all tools:** `shapeOutput` drops any field not on the
+  list. `aa.id` left the history query so it can't pass as `id`. Which allowed fields a tool
+  returns still depends on its helper's `SELECT`.
+- **Unused fields no longer fetched:** cold review found `getAssetById` still selecting
+  `customFields` and `createdAt`, which the allowed-fields list always dropped. Both left the
+  query, so free-form tenant data never reaches the server for this lookup.
+- **Limit on "emails absent":** this holds for `users.email` and every other user field. An
+  email someone types into a note leaves as note text, because plan item 5 returns notes
+  as they are.
+- **Wording widened:** the descriptions say "notes and other text fields" on all three
+  tools, because names and locations are typed text too.
+- **`check:tools` needs `OTHER_TENANT_ID`:** a real tenant with no assets, because
+  `no-such-tenant` no longer boots. It grew from 31 to 89 checks.
+- **Forced-bug test ran in throwaway copies,** so the repo was never broken. It removed the
+  tenant condition from all three helpers, not one, on both the old and the new code.
+- **Injection test extended:** three cold sessions instead of one, one of them told to do
+  what the note asks, and a fourth ordered to try the cross-tenant call. No live session
+  attempted one, so the server's refusal is proven by the scripted client in `check:tools`.
+- **Wildcards left alone (Ankit's call):** `%` and `_` still act as wildcards in `search` and
+  `category`. Results stay inside the launch tenant and the AI can already list every asset.
