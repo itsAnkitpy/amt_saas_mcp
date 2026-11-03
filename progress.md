@@ -32,3 +32,13 @@
   unreadable by construction. Deviation recorded in PRD module 02.
 - Post 2 drafted (`posts/02-database-login-that-cant-write.md`) — Ankit to edit+post.
 - Next: module 03 (tools) — re-verify `registerTool` against SDK 1.29.0 docs first.
+
+## 2026-10-26
+- SDK moved to v2 before module 03 (Ankit's call; deviation in PRD module 01):
+  `@modelcontextprotocol/server` 2.4.0 pinned exact, entry now `serveStdio(factory)`.
+  Typecheck + build pass; `npm audit` 0 (the 2 v1 `@hono/node-server` findings gone).
+- Smoke test answers both client eras (2025 `initialize`, 2026-07-28 `server/discover`);
+  zero-tool `tools/list` = -32601 in both, confirmed against a one-tool control copy.
+  Headless Claude Code 2.1.310: `"status": "connected"`.
+- Next: module 03 (tools) — `registerTool` + zod v4 `z.object` per the installed 2.4.0
+  types; add `zod` to package.json then.

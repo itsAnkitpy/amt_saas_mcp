@@ -16,7 +16,9 @@ it owns scoping, validation, and what leaves the building.
 
 **In (v0):**
 - Three read-only tools: asset by QR value, list a tenant's assets, assignment history
-- stdio transport (local: Claude Code launches the server as a subprocess)
+- stdio transport (local: Claude Code launches the server as a subprocess), serving both
+  2025-handshake and 2026-07-28 clients via SDK v2 `serveStdio` (migrated 2026-10-26 —
+  see module 01 deviation)
 - Local dev database only, via a dedicated read-only Postgres role
 - Tenant fixed at server launch — see Constraints
 - Guardrails: input validation, tenant re-check on every outgoing row, PII minimization,
@@ -28,20 +30,21 @@ it owns scoping, validation, and what leaves the building.
 - HTTP transport, remote deploy, auth for multiple callers (later roadmap box: API MCP
   connector test)
 - Hosted/production database access
-- SDK v2 migration (beta today; stable expected ~2026-07-28 — see Open questions)
 - KB MCP server (roadmap stretch), GitHub MCP (dropped 2026-07-22)
 
 ## Constraints
 
-- TypeScript strict; official `@modelcontextprotocol/sdk` **v1.29.0** (dated 2026-07-22 —
-  version-sensitive, re-check at build)
+- TypeScript strict; official `@modelcontextprotocol/server` **v2.4.0**, pinned exact
+  (dated 2026-10-26 — moved from `@modelcontextprotocol/sdk` v1.29.0, see module 01
+  deviation; version-sensitive, re-check at build)
 - Database access: `pg` client + parameterized queries ONLY (values go in placeholders,
   never string-built SQL). No ORM — decision recorded in module 02
 - Dedicated read-only Postgres role; server never connects as the app user
 - **Tenant identity is server config (env at launch), never a tool argument** — the AI is
   never trusted with scoping. Decision + alternates in module 04
-- No new libraries beyond: sdk, pg, and the SDK's own schema dependency (zod in v1 —
-  confirm exact API from SDK README at build time, not from memory)
+- No new libraries beyond: sdk, pg, and the SDK's own schema dependency (zod `^4.2.0`,
+  a direct dependency of the v2 server package — add it to `package.json` when module 03
+  first imports it; confirm exact API from the installed SDK at build time, not memory)
 - KISS: three tools, few files. This repo is also a teaching artifact — the isolation
   logic must stay readable in one sitting
 - Output hygiene: only fields the task needs; user emails never leave the server
@@ -58,8 +61,10 @@ it owns scoping, validation, and what leaves the building.
 
 ## Open questions
 
-- **SDK v2 migration:** stable expected ~2026-07-28. Decision: build on v1.29 now;
-  revisit after v2 stable ships — migration is write-up material, not a blocker
+- **SDK v2 migration:** RESOLVED 2026-10-26. v2 stable shipped (2.0.0 on 2026-07-27,
+  2.4.0 on 2026-10-23); v1 is fixes-only and won't get the 2026-07-28 spec. Migrated
+  before module 03, while only `src/index.ts` touched the SDK — see module 01 deviation.
+  Still write-up material
 - **QR value shape:** today the QR encodes the raw `assetId` (cuid) — verified in
   `src/components/asset-qr-code.tsx:18`. If amt-saas ever switches to URL-encoded QR
   labels (e.g. `https://.../assets/{id}`), tool 1's input parsing must follow. Tool

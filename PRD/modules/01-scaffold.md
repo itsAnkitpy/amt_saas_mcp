@@ -40,4 +40,15 @@ direction; `npm run typecheck` passes.
 
 ## Deviation (if any)
 
-None.
+- **2026-10-26 — SDK moved to v2 before module 03** (Ankit's call): v1
+  `@modelcontextprotocol/sdk` 1.29.0 → v2 `@modelcontextprotocol/server` 2.4.0, pinned
+  exact. The "revisit at v2 stable" trigger above fired: v2 stable shipped 2026-07-27
+  and v1 is now fixes-only, never getting the 2026-07-28 spec. Moved while only
+  `src/index.ts` touched the SDK (two imports, zero tools), so no tool gets written
+  twice. Entry switched from `server.connect(new StdioServerTransport())` to
+  `serveStdio(factory)` — one server answers both 2025-handshake clients and 2026-07-28
+  per-request clients. API checked against the installed 2.4.0 type definitions, not
+  memory. Alternate rejected: stay on 1.29 through v0 and migrate after module 05 — the
+  public repo would ship on a fixes-only line and every tool would be converted once.
+  Done when: typecheck passes, smoke test answers both client eras, Claude Code
+  connects.
