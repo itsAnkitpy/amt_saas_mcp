@@ -42,3 +42,15 @@
   Headless Claude Code 2.1.310: `"status": "connected"`.
 - Next: module 03 (tools) — `registerTool` + zod v4 `z.object` per the installed 2.4.0
   types; add `zod` to package.json then.
+
+## 2026-11-03
+- Module 03 (tools) built in `src/tools.ts`: `get_asset_by_qr`, `list_assets`,
+  `get_assignment_history`. `npm run check:tools`: 31 of 31 pass against real dev data.
+- Asset tag questions fumbled at first, so `list_assets` got a `search` input (Ankit's
+  call, module 03 deviation).
+- Cold Claude Code sessions on the final version: QR, maintenance, who-holds and both tag
+  questions answered correctly with no failed calls. Module 03 done-when met.
+- Cold review found two bugs, both fixed (module 03 deviation): dates came back 5h30 early
+  on a non-UTC machine, and a dropped idle database connection crashed the server. Checks
+  and cold sessions rerun after the fixes.
+- Next: module 04 (guardrails).

@@ -10,6 +10,13 @@
 
 import pg from "pg";
 
+// Prisma stores UTC in columns with no timezone label. pg's default reads those as
+// the host's local time, which shifts every date on a non-UTC host, so read them as UTC.
+pg.types.setTypeParser(
+  pg.types.builtins.TIMESTAMP,
+  (value) => new Date(`${value.replace(" ", "T")}Z`)
+);
+
 // Row shapes are typed by hand — the no-ORM decision from PRD module 02.
 // customFields is the category-defined JSON blob; passed through as-is.
 export interface AssetDetailRow {
@@ -55,6 +62,12 @@ export interface ListAssetsFilters {
   // Compared as text (status::text = $n) — an unknown value returns zero rows
   // instead of throwing an enum-cast error. Fine at this table size.
   status?: string;
+  // Same text comparison as status.
+  condition?: string;
+  // Case-insensitive substring match on the category name.
+  category?: string;
+  // true = held by someone, false = held by no one.
+  assigned?: boolean;
   // Case-insensitive substring match on name, serialNumber, assetTag.
   search?: string;
 }
@@ -64,11 +77,18 @@ export interface ListAssetsResult {
   totalCount: number;
 }
 
-const DEFAULT_LIMIT = 50; // PRD overview: default 50 rows + total count
-const MAX_LIMIT = 200;
+export const DEFAULT_LIMIT = 50; // PRD overview: default 50 rows + total count
+export const MAX_LIMIT = 100; // PRD module 03: hard cap
 
 export function createDb(databaseUrl: string) {
-  const pool = new pg.Pool({ connectionString: databaseUrl, max: 3 });
+  // allowExitOnIdle: idle connections must not keep the process alive after the
+  // client closes stdin. The MCP stdio binding says to exit promptly.
+  const pool = new pg.Pool({ connectionString: databaseUrl, max: 3, allowExitOnIdle: true });
+  // An idle connection can drop, for example when Postgres restarts. Without a listener
+  // that error crashes the server. The next query opens a new connection.
+  pool.on("error", (error) => {
+    console.error("amt-asset-mcp: idle database connection lost:", error.message);
+  });
 
   async function getAssetById(
     tenantId: string,
@@ -99,12 +119,26 @@ export function createDb(databaseUrl: string) {
     const cappedLimit = Math.min(Math.max(Math.trunc(limit), 1), MAX_LIMIT);
 
     // Conditions grow dynamically but values only ever enter via params.
-    const conditions: string[] = [`a."tenantId" = $1`];
+    // Archived assets stay out, matching the amt-saas asset list and dashboard.
+    const conditions: string[] = [`a."tenantId" = $1`, `a."archivedAt" IS NULL`];
     const params: unknown[] = [tenantId];
 
     if (filters.status !== undefined) {
       params.push(filters.status);
       conditions.push(`a.status::text = $${params.length}`);
+    }
+    if (filters.condition !== undefined) {
+      params.push(filters.condition);
+      conditions.push(`a.condition::text = $${params.length}`);
+    }
+    if (filters.category !== undefined) {
+      params.push(`%${filters.category}%`);
+      conditions.push(`c.name ILIKE $${params.length}`);
+    }
+    if (filters.assigned !== undefined) {
+      conditions.push(
+        filters.assigned ? `a."assignedToId" IS NOT NULL` : `a."assignedToId" IS NULL`
+      );
     }
     if (filters.search !== undefined) {
       params.push(`%${filters.search}%`);
@@ -116,7 +150,10 @@ export function createDb(databaseUrl: string) {
     const where = conditions.join(" AND ");
 
     const countResult = await pool.query<{ count: string }>(
-      `SELECT count(*) AS count FROM assets a WHERE ${where}`,
+      `SELECT count(*) AS count
+       FROM assets a
+       JOIN asset_categories c ON c.id = a."categoryId"
+       WHERE ${where}`,
       params
     );
 

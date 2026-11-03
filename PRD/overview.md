@@ -27,6 +27,7 @@ it owns scoping, validation, and what leaves the building.
 
 **Out (v0) — named so it can't creep in:**
 - Any write/mutation tool
+  - Permanent, not only v0: this server stays read-only for good (Ankit's call, 2026-11-03)
 - HTTP transport, remote deploy, auth for multiple callers (later roadmap box: API MCP
   connector test)
 - Hosted/production database access
