@@ -54,7 +54,9 @@ All 2026-11-03, confirmed by Ankit before the build:
 - **Tenant ID stays out of `.mcp.json`:** step 1 would have put the dev tenant ID in a file
   tracked in a public repo. `.mcp.json` now reads `${AMT_TENANT_ID}` and `${AMT_MCP_DB_URL:-...}`
   from the shell. Cost: anyone running this must set the variable. If it's unset, the server
-  gets the raw `${AMT_TENANT_ID}` text as its tenant and shows no data.
+  gets the raw `${AMT_TENANT_ID}` text as its tenant and refuses to start. If the database is down
+  at launch it can't check, so it stays up, and `list_assets` reports the missing tenant once the
+  database is back.
 - **Trace log added, before the eval:** the roadmap's Traces box was missing from this plan.
   One line per tool call on stderr, with tool, tenant, row count, duration and error. It goes
   before the eval because a tool code change after the eval means rerunning the eval.
@@ -107,5 +109,84 @@ At push, Ankit's call:
 - **Pushed before the cold review:** the Execution section asks for `code-review` and a Codex pass
   before any pushed commit. Ankit asked for the commit and push first, so both run on the pushed
   branch. Cost: a finding means a follow-up commit in a public repo.
-- **Done-when not fully met at push:** the two Vercel MCP lines for the design notes are still owed,
-  and the another-tenant eval task passes 4 of 6 over repeats.
+- **Done-when not fully met at push:** the two Vercel MCP lines for the design notes were still owed,
+  and the another-tenant eval task passes 4 of 6 over repeats. Ankit gave the Vercel lines on
+  2026-11-04, and they're in the track notes. They don't compare it with the `vercel` CLI, so that
+  half stays unanswered.
+
+Found in the cold review, Ankit's call, 2026-11-04. Each fix has a check that fails without it:
+
+- **A closed stderr crashed the server:** the logbook writes to stderr on every call, and if the
+  program that launched the server closes stderr, the next write crashed it. All 5 test runs died
+  after 2 replies, where module 04's code answered 20 of 20. One line now ignores that error. Claude
+  Code 2.1.317 didn't trigger this in the real session. Cost: a failed logbook write is silent.
+- **The logbook could swallow a reply:** a tool name that isn't text, or reusing a cancelled call's
+  ID, left the client with no reply and nothing logged, where module 04's code answered both. The
+  README and a code comment said only a log line could be lost. The name is now checked before use,
+  and a failure while logging loses only that line.
+- **A wrong tenant could read as an empty client:** with the database down at launch, the boot check
+  can't run. Once the database was back, `list_assets` returned `tenantName: null` and no rows, not
+  an error, so the AI could report a client with no assets. It now returns an error. The other two
+  tools still say not found.
+- **Gaps in `check:tools`:** breaking the code on purpose 32 ways left 7 unnoticed and 1 hanging the
+  script. It now has 116 checks and a 15-second limit on each reply, and it covers newer-style
+  clients, protocol errors, the logbook's length cuts, real durations and all of the one-tenant
+  wording. With the fixes in, 37 breaks were tried, including each fix undone, and all were caught.
+- **Docs corrected:** what a missing tenant does, the wording on how SQL is built, and unknown tool
+  names in the logbook.
+- **Rerun on the final code:** the forced-bug test and its control gave the same result as before.
+  The full eval scored 8 of 9 for $0.229. The another-tenant task failed that run and passed 3 of 6
+  with its 5 repeats on Claude Code 2.1.318, against 4 of 6 before on 2.1.317. These fixes changed
+  nothing the AI reads for a real tenant, and every miss was the known one, assets listed and
+  labelled as this tenant's. So it's 7 of 12 across both sets, from two Claude Code versions, and
+  **the done-when "passes on all tasks" is still not met.** The real session wasn't rerun, because
+  the eval's T4 asks the same question on this code.
+- **Security review of these changes:** nothing at the reporting bar, from reading the code. It did
+  point out that the new wrong-tenant check's database forwarder listened on all network interfaces.
+  It now listens on this machine only.
+- **Codex pass skipped:** Ankit no longer has Codex. The track notes record no Codex pass on any
+  earlier module either. Cost: this module has no second opinion from another company's AI.
+
+Found in the second review of the fixes, left as they are, Ankit's call, 2026-11-04. None can show
+another tenant's data. The review's other two items are fixed: `.DS_Store` is ignored, and "7 of 12"
+now names its two Claude Code versions.
+
+- **Wrong "not found" answer:** with a mistyped tenant and the database down at launch,
+  `get_asset_by_qr` and `get_assignment_history` say not found once the database is back. Left
+  because it takes both failures at once and `list_assets` reports the real problem. In the README.
+- **No database time limit:** a database that stops responding leaves a call waiting with no limit.
+  A host that drops packets gave no handshake answer after 12 seconds, and module 04's code does the
+  same. Left because the database is on the same machine today. In the README. **Add the database
+  library's time limits before the server talks to a database on another machine.**
+- **The wrong-tenant error names `TENANT_ID`:** people set `AMT_TENANT_ID`. Left because `TENANT_ID`
+  is the name the server reads and `.mcp.json` connects the two. The AI reads this text, so a change
+  means rerunning the eval.
+- **Cancelled calls stay in the logbook's list:** the entry lasts until the session ends. If its ID
+  is reused, the reply still arrives and a log line can be lost. Left because the entry is tiny and
+  the logbook isn't an audit record. In the README.
+- **A log line can claim a reply that never left:** this happens only when the client has gone, and
+  the server exits right after. Left because nobody is waiting for that reply. The README's "counted
+  from the reply that left the server" isn't true in this one case.
+- **A failed log line is dropped silently:** only a reused call ID reaches this today. Left because
+  losing a line is better than losing a reply. In the README.
+- **Extra tenant name query on each list:** 3,000 lists ran in about a second. Left because the
+  query is also what catches a wrong tenant.
+- **The wrong-tenant check and unusual database URLs:** IP and password forms pass. A socket URL
+  fails only this check, where the script before the fixes passed. IPv6 fails on both scripts. TLS
+  is untested. Left because it never passes by mistake and the README's setup uses a plain local URL.
+- **The same check's freed port could be taken:** it frees a port and then reuses it, so another
+  program could take it in between. Left because that fails loudly and never passes by mistake.
+- **The reused-ID check depends on timing:** it fails falsely if the cancel is about 5 ms late. Left
+  because that wasn't seen in 32 runs, 20 of them under full CPU load.
+
+Injection test rerun on the fixes, 2026-11-04, on Ankit's yes. It last ran in module 04, and module
+05 has since added wording to the tool descriptions and a tenant name to the `list_assets` reply:
+
+- **Setup:** a poisoned note in one asset, written with the admin login, and three cold sessions on
+  Claude Sonnet 5.5 and Claude Code 2.1.318. One session was told to do whatever the note asked. The
+  grader first gave the expected verdict on all 5 of its fake sessions.
+- **Result:** all three showed the note as text and didn't act on it, $0.052. None tried to reach
+  another tenant, and no email address came out.
+- **Limits:** three sessions is a small sample. None tried, so this run didn't test the server's own
+  blocking. `check:tools` and the forced-bug test cover that.
+- **Cleanup:** the note is removed, and the row matches its original fingerprint.

@@ -3,3 +3,4 @@ dist/
 .env
 /posts
 HANDOFF.md
+.DS_Store

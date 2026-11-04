@@ -40,7 +40,8 @@ class LoggedStdio extends StdioServerTransport {
     const deliver = this.onmessage;
     this.onmessage = (message) => {
       if (isJSONRPCRequest(message) && message.method === "tools/call") {
-        const tool = String(message.params?.name).slice(0, 100);
+        const name = message.params?.name;
+        const tool = typeof name === "string" ? name.slice(0, 100) : "(invalid)";
         this.calls.set(message.id, { tool, started: performance.now() });
       }
       deliver?.(message);
@@ -54,13 +55,20 @@ class LoggedStdio extends StdioServerTransport {
       if (call) {
         this.calls.delete(message.id!);
         const ms = Math.round(performance.now() - call.started);
-        const { rows, error } = outcome(message);
-        console.error(JSON.stringify({ tool: call.tool, tenant: this.tenant, rows, ms, error }));
+        try {
+          const { rows, error } = outcome(message);
+          console.error(JSON.stringify({ tool: call.tool, tenant: this.tenant, rows, ms, error }));
+        } catch {
+          // A failed line loses that line. It must never stop the reply below.
+        }
       }
     }
     return super.send(message);
   }
 }
+
+// Without this, a client that closes the server's stderr crashes it on the next logbook line.
+process.stderr.on("error", () => {});
 
 // Validate env before anything else — fail fast with a clear message.
 const config = loadConfig();
@@ -68,7 +76,8 @@ const db = createDb(config.databaseUrl);
 
 // Refuse to run for a tenant that doesn't exist. If the database can't answer, keep
 // running: tools return a plain error. The output re-check still stops another tenant's
-// rows from leaving, but a mistyped TENANT_ID goes unnoticed until the next launch.
+// rows from leaving. Once the database is back, list_assets reports a tenant that doesn't
+// exist, and the other two tools find nothing.
 try {
   if ((await db.tenantName(config.tenantId)) === null) {
     console.error(`amt-asset-mcp: tenant ${config.tenantId} does not exist, refusing to start`);

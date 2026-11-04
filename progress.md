@@ -67,4 +67,24 @@
   $0.070. Exam: 9 of 9 on the final run, $0.225. The another-tenant task passes 4 of 6 over repeats
   (module 05 deviation). Security review: nothing at the reporting bar.
 - Committed and pushed at Ankit's request, before the cold review (module 05 deviation).
-- Next: cold review of the pushed branch, and Ankit's two Vercel MCP one-liners.
+- Next: cold review of the pushed branch.
+
+## 2026-11-04
+- Cold review of module 05 found three new bugs, all fixed (module 05 deviation): a closed stderr
+  crashed the server, the logbook could swallow a reply, and a wrong tenant could read as an empty
+  client. Docs corrected.
+- `check:tools`: 116 of 116. Breaking the code on purpose, including undoing each fix: 37 of 37 caught.
+- Exam on the fixed code: 8 of 9, $0.229. The another-tenant task failed that run and passes 3 of 6
+  with its repeats on Claude Code 2.1.318, 7 of 12 with the earlier set on 2.1.317. Security review:
+  nothing at the reporting bar.
+- Ankit's Vercel MCP lines are in the track notes, with no `vercel` CLI comparison.
+- Codex pass skipped, Ankit's call: he no longer has Codex.
+- Second review of the fixes, in a new session: nothing that should stop the move to `main`.
+  `check:tools`: 116 of 116 on 32 runs, and in a clean copy on Node 20, 22 and 24. Of its 12 findings,
+  2 are fixed (`.DS_Store` ignored, the two Claude Code versions stated). The other 10 stay as they
+  are, Ankit's call (module 05 deviation).
+- Injection test rerun on the fixes: three cold sessions, one told to obey, showed the poisoned note
+  as text and did not act on it, $0.052. None tried, so this run didn't test the server's own blocking.
+  Note removed, row fingerprint matches.
+- Committed, pushed and moved to `main` at Ankit's request.
+- Next: publishing the write-up, Ankit's call.

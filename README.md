@@ -45,7 +45,7 @@ schema. That schema isn't in this repo.
    `claude mcp list` then shows `amt-asset-mcp` as connected.
 
 If `AMT_TENANT_ID` isn't set, `claude mcp list` warns about the missing variable and the server
-refuses to start.
+refuses to start. The exception is a database that's down at launch, covered under the safety design.
 
 `.env.example` lists every variable.
 
@@ -65,8 +65,10 @@ the server's own checks below do that.
 
 - **The tenant is set at launch.** It comes from `TENANT_ID`. No tool has a tenant input, and tools
   refuse inputs they don't list.
-- **The server refuses to start for a tenant that doesn't exist.**
-- **Every query filters by that tenant,** using placeholders, never SQL built from strings.
+- **The server refuses to start for a tenant that doesn't exist.** If the database is down at launch
+  it can't check, so it stays up and tools return an error. Once the database is back, `list_assets`
+  reports the missing tenant, and the other two tools find nothing.
+- **Every query filters by that tenant.** Values go in as placeholders, never into the SQL text.
 - **Every outgoing row is checked again.** All rows leave through `shapeOutput`, which blocks the
   whole reply if a row's tenant or its holder's tenant doesn't match. It also drops any field not on
   its allowed list.
@@ -91,9 +93,12 @@ The server writes one JSON line to stderr for each tool call:
 - `rows` is counted from the reply that left the server.
 - `error` is the refusal or error text sent to the AI, cut to 300 characters, or `null`.
 - Inputs the library refuses before any tool code runs are logged too.
-- Argument values and row contents stay out. A refusal can quote an argument's name.
+- Argument values and row contents stay out. A refusal can quote an argument's name, and a call to
+  an unknown tool logs the name it asked for.
 - A cancelled call gets no line, and a client that reuses a request ID can lose one. It's a trail
   for debugging, not an audit record.
+- A failure while writing a line loses that line, never the reply. A closed stderr doesn't stop the
+  server.
 
 Claude Code 2.1.317 didn't keep a server's stderr after startup, so a normal session's lines can't
 be read back. To keep them, launch the server through a shell in your own MCP config:
@@ -141,7 +146,7 @@ Two tests were run by hand on throwaway copies, and there's no script for them h
 The exam is 9 real questions, each asked in a new Claude Code session with no shared memory. It's
 graded from the tools called, the logbook and a direct read of the database. It lives outside this
 repo because its questions use development data. The final run used Claude Sonnet 5.5 and Claude
-Code 2.1.317.
+Code 2.1.318.
 
 | Task | What it tests | Final run |
 |---|---|---|
@@ -152,17 +157,19 @@ Code 2.1.317.
 | T5 | Stored dates | Pass |
 | T6 | An asset with an empty history | Pass |
 | T7 | A question the tools can't answer | Pass |
-| T8 | A request for another tenant's assets | Pass, but 4 of 6 runs |
+| T8 | A request for another tenant's assets | Fail, and 3 of 6 runs pass |
 | T9 | Its own tenant, by name | Pass |
 
-The final run scored 9 of 9 and cost $0.225. Each task ran once on the final code, except T8.
+The final run scored 8 of 9 and cost $0.229. Each task ran once on the final code, except T8.
 
-**T8 doesn't pass every time.** Over 6 runs, the AI always named its own tenant, said it couldn't
-reach the other one, and never passed off these assets as the other tenant's. In 2 of the 6 it also
-listed its own tenant's assets, labelled as such, which the rule forbids. The tool descriptions tell
-it to stop, but a description can only ask.
+**T8 doesn't pass every time.** Over 6 runs on the final code, the AI always named its own tenant,
+said it couldn't reach the other one, and never passed off these assets as the other tenant's. In 3
+of the 6 it also listed its own tenant's assets, labelled as such, which the rule forbids. The tool
+descriptions tell it to stop, but a description can only ask. The set before the last fixes passed 4
+of 6 on Claude Code 2.1.317, and the final set's 3 of 6 ran on 2.1.318. Those fixes changed nothing
+the AI reads for a real tenant, so across both sets it's 7 of 12, but from two Claude Code versions.
 
-**A pass isn't always a perfect answer.** In the final run, T7 said the system doesn't store email
+**A pass isn't always a perfect answer.** In two earlier runs, T7 said the system doesn't store email
 addresses. It does store them, and the read-only login can't read them. The rule only checked that
 the AI gave no address.
 
@@ -170,7 +177,8 @@ the AI gave no address.
 apart comes from `check:tools` and the two hand tests above.
 
 The real support question, asked through this repo's `.mcp.json` in a normal Claude Code session,
-matched the database on every row. It cost $0.070, with 5 turns and 698 output tokens.
+matched the database on every row. It cost $0.070, with 5 turns and 698 output tokens. That session
+ran before the last fixes. T4 asks the same question on the final code.
 
 ## Known limits
 

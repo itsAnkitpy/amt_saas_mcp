@@ -199,6 +199,11 @@ export function registerTools(server: McpServer, db: Db, tenantId: string): void
         // tenant's name in 2 of 6 eval runs. It's stored text, so it goes in the reply, not
         // in a description. It isn't a row, so shapeOutput doesn't cover it: check:tools does.
         const name = await db.tenantName(tenantId);
+        // The boot check can't run while the database is down, so a wrong tenant can get this
+        // far. Without this the AI reports a client with no assets.
+        if (name === null) {
+          return fail("The tenant this server was started for doesn't exist. Check TENANT_ID and restart.");
+        }
         return ok({ tenantName: name, totalCount, assets: shapeOutput(tenantId, rows) });
       })
   );
