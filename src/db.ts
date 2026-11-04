@@ -93,9 +93,10 @@ export function createDb(databaseUrl: string) {
     console.error("amt-asset-mcp: idle database connection lost:", error.message);
   });
 
-  async function tenantExists(tenantId: string): Promise<boolean> {
-    const result = await pool.query(`SELECT 1 FROM tenants WHERE id = $1`, [tenantId]);
-    return result.rows.length > 0;
+  // Null means no such tenant, which is also the boot check. Pinned to one row by primary key.
+  async function tenantName(tenantId: string): Promise<string | null> {
+    const result = await pool.query<{ name: string }>(`SELECT name FROM tenants WHERE id = $1`, [tenantId]);
+    return result.rows[0]?.name ?? null;
   }
 
   async function getAssetById(
@@ -210,7 +211,7 @@ export function createDb(databaseUrl: string) {
     await pool.end();
   }
 
-  return { tenantExists, getAssetById, listAssets, getAssignmentHistory, close };
+  return { tenantName, getAssetById, listAssets, getAssignmentHistory, close };
 }
 
 export type Db = ReturnType<typeof createDb>;

@@ -61,4 +61,10 @@
   Module 04 done-when met, with the email limit in the module 04 deviation section.
 - Cold code review: holder re-check tightened and unused fields removed (module 04 deviation).
   Security review rerun on the fixes: nothing at the reporting bar.
-- Next: module 05 when Ankit says go.
+- Module 05 built: Claude Code wired through `.mcp.json`, one logbook line per tool
+  call, README added. `check:tools`: 107 of 107, also in a clean copy of the public files.
+- Real support question through `.mcp.json`: correct on all 3 rows against a direct database read,
+  $0.070. Exam: 9 of 9 on the final run, $0.225. The another-tenant task passes 4 of 6 over repeats
+  (module 05 deviation). Security review: nothing at the reporting bar.
+- Committed and pushed at Ankit's request, before the cold review (module 05 deviation).
+- Next: cold review of the pushed branch, and Ankit's two Vercel MCP one-liners.

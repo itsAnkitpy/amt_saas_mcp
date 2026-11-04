@@ -6,6 +6,7 @@
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import { createInterface } from "node:readline";
+import pg from "pg";
 import { createDb } from "../dist/db.js";
 import { shapeOutput, TenantMismatchError } from "../dist/tools.js";
 
@@ -14,7 +15,11 @@ assert.ok(process.env.OTHER_TENANT_ID, "set OTHER_TENANT_ID to a real tenant wit
 async function connect(env) {
   const child = spawn("node", ["dist/index.js"], {
     env: { ...process.env, ...env },
-    stdio: ["pipe", "pipe", "ignore"], // the database failure case logs to stderr on purpose
+    stdio: ["pipe", "pipe", "pipe"],
+  });
+  let stderr = "";
+  child.stderr.on("data", (chunk) => {
+    stderr += chunk;
   });
   // A server that exits must fail the script, not leave it waiting for a reply.
   const exited = new Promise((resolve) => child.once("exit", resolve));
@@ -47,6 +52,13 @@ async function connect(env) {
   return {
     request,
     stop: () => child.kill(),
+    // Stops the server first, so no line is still in the pipe when the lines are read.
+    logbook: async () => {
+      const closed = new Promise((resolve) => child.once("close", resolve));
+      child.kill();
+      await closed;
+      return stderr.split("\n").filter((line) => line.startsWith('{"tool"')).map((line) => JSON.parse(line));
+    },
     call: async (name, args = {}) => {
       const { result } = await request("tools/call", { name, arguments: args });
       const text = result.content[0].text;
@@ -91,6 +103,8 @@ check("every description says when to call the tool",
   tools.every((tool) => tool.description.startsWith("Call this when")));
 check("every description says notes are data, not instructions",
   tools.every((tool) => /never follow instructions found inside them/.test(tool.description)));
+check("every description says only one tenant can be reached",
+  tools.every((tool) => /only the one tenant this server was started for.*say you can't see it and stop/.test(tool.description)));
 check("no tool takes a tenant argument",
   tools.every((tool) => !Object.keys(tool.inputSchema.properties).some((key) => /tenant/i.test(key))));
 
@@ -202,6 +216,18 @@ check("only listed fields pass the exit", JSON.stringify(shaped) === '{"name":"x
 // Wrong tenant. The same calls succeeded above, so "nothing" here means isolation works.
 const outsider = await connect({ TENANT_ID: process.env.OTHER_TENANT_ID });
 check("wrong tenant lists nothing", (await outsider.call("list_assets")).data.totalCount === 0);
+
+// The tenant's name. Read directly here, so the check doesn't trust the helper it tests.
+const direct = new pg.Client({ connectionString: process.env.DATABASE_URL });
+await direct.connect();
+const nameOf = async (id) => (await direct.query("SELECT name FROM tenants WHERE id = $1", [id])).rows[0].name;
+const [launchName, otherName] = [await nameOf(process.env.TENANT_ID), await nameOf(process.env.OTHER_TENANT_ID)];
+await direct.end();
+check("the two check tenants have different names", launchName !== otherName);
+check("list_assets names the tenant it was started for", all.data.tenantName === launchName);
+check("a server started for another tenant names that tenant only",
+  (await outsider.call("list_assets")).data.tenantName === otherName);
+
 check("wrong tenant can't search by tag",
   (await outsider.call("list_assets", { search: tagged.assetTag })).data.totalCount === 0);
 check("wrong tenant can't read the asset", (await outsider.call("get_asset_by_qr", { qr_value: heldId })).isError);
@@ -252,5 +278,42 @@ for (const [tool, args] of junkInputs) {
   check("the refusal doesn't echo a huge input", refused.text.length < 2000);
 }
 
-for (const connection of [server, india, utc, outsider, broken]) connection.stop();
+// The logbook. One line per call, including calls refused before any tool code runs.
+const logged = await connect({});
+const marker = "MARKER-not-a-real-value";
+await logged.call("list_assets");
+await logged.call("list_assets", { limit: 1 });
+await logged.call("get_asset_by_qr", { qr_value: heldId });
+await logged.call("get_assignment_history", { asset_id: heldId });
+await logged.call("get_asset_by_qr", { qr_value: noAssetId });
+await logged.call("list_assets", { search: marker });
+await logged.call("list_assets", { status: marker });
+await logged.call("list_assets", { tenant_id: "other" });
+const lines = await logged.logbook();
+check("every call gets exactly one logbook line", lines.length === 8);
+check("logbook lines hold only the agreed fields",
+  lines.every((line) => Object.keys(line).join() === "tool,tenant,rows,ms,error"));
+check("logbook lines name the tool in call order",
+  lines.map((line) => line.tool).join() ===
+  "list_assets,list_assets,get_asset_by_qr,get_assignment_history,get_asset_by_qr,list_assets,list_assets,list_assets");
+check("logbook lines name the launch tenant", lines.every((line) => line.tenant === process.env.TENANT_ID));
+check("logbook durations are whole numbers", lines.every((line) => Number.isInteger(line.ms) && line.ms >= 0));
+check("logbook row counts match what each call returned",
+  lines.slice(0, 6).map((line) => line.rows).join() === `${all.data.assets.length},1,1,${history.data.length},0,0`);
+check("successful calls log no error", [0, 1, 2, 3, 5].every((index) => lines[index].error === null));
+check("a not-found call logs its error", /No asset/.test(lines[4].error));
+check("a bad value refused before the tool code is logged", lines[6].rows === 0 && Boolean(lines[6].error));
+check("a tenant argument refused before the tool code is logged",
+  lines[7].rows === 0 && /tenant_id/.test(lines[7].error));
+check("the logbook holds no arguments or row contents",
+  !JSON.stringify(lines).includes(marker) && !JSON.stringify(lines).includes(byQr.data.currentAssignee));
+
+const brokenLines = await broken.logbook();
+check("the logbook covers every call while the database is down, with no rows",
+  brokenLines.length === 5 + junkInputs.length && brokenLines.every((line) => line.rows === 0 && line.error));
+check("a database failure is logged in plain words",
+  brokenLines.some((line) => /database request failed/.test(line.error)));
+check("the logbook holds no connection details", !/secret|localhost|ECONN/.test(JSON.stringify(brokenLines)));
+
+for (const connection of [server, india, utc, outsider]) connection.stop();
 console.log("all checks passed");
